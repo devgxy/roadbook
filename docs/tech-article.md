@@ -1,6 +1,6 @@
 # 把一句口语收成能发给同伴的路书：Roadbook 的技术与实现
 
-> 开源仓库：[https://github.com/OWNER/REPO](https://github.com/OWNER/REPO)  
+> 开源仓库：[https://github.com/devgxy/roadbook](https://github.com/devgxy/roadbook)  
 > 本文可直接贴到 CSDN 与微信公众号。公众号若不便渲染流程图，可删掉文中「架构图（Mermaid）」一小节，正文已用文字讲清同一条链路。
 
 ---
@@ -76,7 +76,7 @@ flowchart LR
 
 ## 下篇 · 实现：代码怎么对上上面的设计
 
-仓库地址：[https://github.com/OWNER/REPO](https://github.com/OWNER/REPO)。下列路径均相对仓库根目录。
+仓库地址：[https://github.com/devgxy/roadbook](https://github.com/devgxy/roadbook)。下列路径均相对仓库根目录。
 
 ### 1. 一次生成怎么走完
 
@@ -139,8 +139,8 @@ flowchart LR
 ### 6. 本地怎么跑起来
 
 ```bash
-git clone https://github.com/OWNER/REPO.git
-cd REPO
+git clone https://github.com/devgxy/roadbook.git
+cd roadbook
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # 填入你的 Key
@@ -155,4 +155,4 @@ python travel_app.py   # http://127.0.0.1:7861
 
 Roadbook 想证明的是一件小事：在出行场景里，**把「可发给同伴的一版」设计清楚**，往往比堆更多生成能力更重要。规则规划保证数字和取舍说得清；MCP 把地图与班次等外部事实接进来；SSE 让等待变成可感知的进度；分享坚持真链接才画码。欢迎在 GitHub 上 star、提 issue，或直接改一版适合自己团队的路书页。
 
-仓库：[https://github.com/OWNER/REPO](https://github.com/OWNER/REPO)
+仓库：[https://github.com/devgxy/roadbook](https://github.com/devgxy/roadbook)
