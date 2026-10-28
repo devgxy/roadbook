@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>路书后台</title>
+  <link rel="stylesheet" href="/static/css/roadbook.css?v=48" />
+</head>
+<body class="admin-page">
+  <main class="admin-wrap">
+    <h1>路书后台</h1>
+    <p class="admin-sub">反馈原文可下载。使用统计只含行为次数，不含完整行程。</p>
+    {% if not configured %}
+    <p class="login-warn">服务器未配置 ROADBOOK_ADMIN_PASSWORD。</p>
+    {% else %}
+    <form id="adminLogin" class="admin-login">
+      <label for="adminPass">后台口令</label>
+      <input id="adminPass" type="password" autocomplete="current-password" />
+      <button type="submit" class="rb-btn">进入</button>
+      <p id="adminMsg" class="share-status"></p>
+    </form>
+    <section id="adminBoard" class="hidden">
+      <div class="admin-actions">
+        <a class="rb-btn" href="/api/admin/export?kind=feedback">下载反馈 JSON</a>
+        <a class="rb-btn-ghost ghost-btn" href="/api/admin/export?kind=events">下载埋点 JSON</a>
+      </div>
+      <h2>近 7 天</h2>
+      <div class="admin-table-wrap"><table id="adminSeries"></table></div>
+      <h2>生成完成的出行方式</h2>
+      <p id="adminModes"></p>
+      <h2>反馈分类</h2>
+      <p id="adminCats"></p>
+      <h2>最近反馈</h2>
+      <div id="adminFeedback"></div>
+    </section>
+    {% endif %}
+  </main>
+  <script src="/static/js/csrf.js?v=1"></script>
+  <script src="/static/js/admin.js?v=1"></script>
+</body>
+</html>

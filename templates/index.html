@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{% if share_mode %}{{ share_title or "分享路书" }} · Roadbook{% else %}Roadbook 路书{% endif %}</title>
+  <script>
+    (function () {
+      try {
+        var theme = localStorage.getItem("rb-theme");
+        if (theme !== "light" && theme !== "dark") {
+          theme = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        var lang = localStorage.getItem("rb-lang") === "en" ? "en" : "zh";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.lang = lang;
+        document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+      } catch (e) {}
+    })();
+  </script>
+  <script src="/static/echarts.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/roadbook.css?v=73" />
+</head>
+<body data-wx-veil="frost" {% if share_mode %}class="share-mode phone-preview" data-share-id="{{ share_id }}"{% endif %}>
+  <div class="page">
+    <section class="shell{% if share_mode %} share-shell{% endif %}">
+      <div class="shell-top">
+        <div>
+          <div class="brand"><i></i><span data-i18n="brand">Roadbook · 自驾路书</span></div>
+          <h1>{% if share_mode %}{{ share_title or "分享路书" }}{% else %}<span data-i18n="title">自驾路书</span>{% endif %}</h1>
+          <p class="sub">{% if share_mode %}扫码打开即可查看完整行程、预算与行前准备。免登录可导航。{% else %}<span data-i18n="sub">真实沿途分段 · 一键导航 · 日均动态预算 · 对话微调 · 微信分享海报。</span>{% endif %}</p>
+        </div>
+        <div class="shell-actions">
+          <button type="button" class="user-avatar hidden" id="userAvatar" aria-label="打开设置" title="设置"></button>
+          <button type="button" class="rb-btn-ghost ghost-btn" id="openSettings" data-i18n="settings">设置</button>
+        </div>
+      </div>
+      {% if share_mode %}
+      <p class="share-banner">只读分享 · 完整行程如下。收藏或修改会复制到你自己的路书，不影响原件。</p>
+      <div class="share-actions">
+        <button type="button" class="rb-btn" id="shareSave">收藏到我的路书</button>
+        <button type="button" class="rb-btn-ghost ghost-btn hidden" id="shareFork">据此修改</button>
+        <a class="rb-btn-ghost ghost-btn" id="shareMakeOwn" href="/login?next=/">我也要做路书</a>
+      </div>
+      <p class="share-status" id="shareStatus"></p>
+      <div class="hidden" aria-hidden="true">
+        <input id="origin" /><input id="destination" /><input id="days" type="number" value="7" />
+        <input id="startDate" type="date" /><input id="query" />
+        <button type="button" id="go"></button><div id="status"></div>
+      </div>
+      {% else %}
+
+      <button type="button" class="plan-summary hidden" id="planSummary" aria-expanded="false">
+        <span class="plan-summary-text" id="planSummaryText"></span>
+        <span class="plan-summary-action" data-i18n="planSummaryEdit">改需求</span>
+      </button>
+
+      <div id="planFormBody">
+      <div class="route-fields">
+        <div>
+          <label for="origin" data-i18n="origin">出发地</label>
+          <input id="origin" placeholder="北京" value="北京" />
+        </div>
+        <button type="button" class="swap-btn" id="swapCities" title="交换起终点">⇄</button>
+        <div>
+          <label for="destination" data-i18n="destination">目的地</label>
+          <input id="destination" placeholder="成都" value="成都" />
+        </div>
+        <div class="days-field">
+          <label for="days" data-i18n="days">天数</label>
+          <input id="days" type="number" min="1" max="14" value="7" />
+        </div>
+        <div class="days-field">
+          <label for="startDate" data-i18n="startDate">出发日期</label>
+          <input id="startDate" type="date" />
+        </div>
+      </div>
+
+      <button type="button" class="pref-summary" id="prefSummaryToggle" aria-expanded="false">
+        <span class="pref-summary-text" id="prefSummaryText">经典均衡 · 经典地标 · 舒适 · 全程自驾 · 高速优先</span>
+        <span class="pref-summary-action" data-i18n="prefSummaryEdit">改偏好</span>
+      </button>
+      <div class="pref-block is-collapsed" id="prefBlock" hidden>
+        <div class="pref-label" data-i18n="paceLabel">行程节奏</div>
+        <div class="pref-row" data-pref="pace">
+          <button type="button" class="pref-chip" data-value="relaxed" data-i18n="paceRelaxed">轻松慢游</button>
+          <button type="button" class="pref-chip active" data-value="balanced" data-i18n="paceBalanced">经典均衡</button>
+          <button type="button" class="pref-chip" data-value="hardcore" data-i18n="paceHard">特种兵</button>
+        </div>
+        <div class="pref-label" data-i18n="themeLabel">同行主题</div>
+        <div class="pref-row" data-pref="theme">
+          <button type="button" class="pref-chip active" data-value="landmark" data-i18n="themeLandmark">经典地标</button>
+          <button type="button" class="pref-chip" data-value="family" data-i18n="themeFamily">亲子友好</button>
+          <button type="button" class="pref-chip" data-value="photo" data-i18n="themePhoto">人文摄影</button>
+          <button type="button" class="pref-chip" data-value="food" data-i18n="themeFood">烟火美食</button>
+        </div>
+        <div class="pref-label" data-i18n="budgetLabel">吃住玩日均档位（自动随天数和车费联动总区间）</div>
+        <div class="pref-row" data-pref="budget_level">
+          <button type="button" class="pref-chip" data-value="economy" data-i18n="budgetEconomy">经济省钱 · 日均 ¥150~260/人</button>
+          <button type="button" class="pref-chip active" data-value="comfort" data-i18n="budgetComfort">舒适口碑 · 日均 ¥260~420/人</button>
+          <button type="button" class="pref-chip" data-value="premium" data-i18n="budgetPremium">品质度假 · 日均 ¥450~780/人</button>
+        </div>
+        <div class="budget-config-card">
+          <div class="budget-range-top">
+            <div>
+              <span style="font-size:12px;color:var(--md-on-surface-variant);font-weight:700">本趟预计人均总预算（含吃住玩 + 油电过路费分摊）：</span>
+              <span class="budget-range-badge" id="budgetRangeText">¥2,600 ~ ¥4,050 / 人</span>
+            </div>
+            <div class="budget-num-inputs">
+              <span>¥</span>
+              <input type="number" id="budgetMinInput" min="300" max="25000" step="50" value="2600" aria-label="预算下限" />
+              <span>—</span>
+              <span>¥</span>
+              <input type="number" id="budgetMaxInput" min="500" max="30000" step="50" value="4050" aria-label="预算上限" />
+            </div>
+          </div>
+          <div id="budgetTierBreakdown" style="font-size:11.5px;color:var(--md-on-surface-variant);line-height:1.45">
+            标准：全季/亚朵级拼房 ¥150/人 · 必吃榜老字号 ¥110/天 · 核心景区含票
+          </div>
+          <div class="budget-sliders">
+            <div>
+              <label for="budgetMinRange"><span>保底体验下限</span><strong id="bMinLbl">¥2600</strong></label>
+              <input type="range" id="budgetMinRange" min="400" max="12000" step="50" value="2600" />
+            </div>
+            <div>
+              <label for="budgetMaxRange"><span>控制花费上限</span><strong id="bMaxLbl">¥4050</strong></label>
+              <input type="range" id="budgetMaxRange" min="600" max="18000" step="50" value="4050" />
+            </div>
+          </div>
+          <div class="budget-meta-row">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-weight:700;color:var(--md-on-surface-variant)">同车分摊：</span>
+              <div class="mini-seg" id="formPaxSeg">
+                <button type="button" data-form-pax="1">1人</button>
+                <button type="button" class="active" data-form-pax="2">2人</button>
+                <button type="button" data-form-pax="3">3人</button>
+                <button type="button" data-form-pax="4">4人</button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-weight:700;color:var(--md-on-surface-variant)">补能车型：</span>
+              <div class="mini-seg" id="formEnergySeg">
+                <button type="button" class="active" data-form-energy="oil">⛽ 燃油车</button>
+                <button type="button" data-form-energy="ev">⚡ 纯电/混动</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pref-label" data-i18n="travelLabel">出行方式</div>
+        <div class="pref-row" data-pref="travel_mode">
+          <button type="button" class="pref-chip active" data-value="drive" data-i18n="travelDrive">全程自驾</button>
+          <button type="button" class="pref-chip" data-value="hsr_rental" data-i18n="travelHsr">高铁 + 到站租车</button>
+        </div>
+        <div class="pref-label" data-i18n="highwayLabel">路线偏好</div>
+        <div class="pref-row" data-pref="highway">
+          <button type="button" class="pref-chip active" data-value="express" data-i18n="highwayExpress">高速优先</button>
+          <button type="button" class="pref-chip" data-value="scenic" data-i18n="highwayScenic">少走高速</button>
+        </div>
+      </div>
+
+      <div class="query">
+        <label for="query" data-i18n="queryLabel">需求描述</label>
+        <input id="query" maxlength="200" data-i18n-placeholder="queryPh" placeholder="例如：这周末从北京去郑州，只看河南，其他帮我推荐" value="规划从北京到成都的7天自驾游" />
+        <button type="button" class="brief-open hidden" id="openBriefChat" data-i18n="briefOpen" tabindex="-1" aria-hidden="true">信息不全就点这里说。确认后，这句话会写回上面。</button>
+      </div>
+      <div class="examples">
+        <button type="button" data-i18n="exHsr" data-ex='["规划从北京到成都的7天高铁+租车","北京","成都",7]' data-travel="hsr_rental">北京 → 成都 · 高铁+租车</button>
+        <button type="button" data-i18n="exBjCd" data-ex='["规划从北京到成都的7天自驾游","北京","成都",7]'>北京 → 成都 · 7天自驾</button>
+      </div>
+      </div>
+
+      <div class="actions">
+        <button id="go" type="button" class="rb-btn" data-i18n="generate">生成路书</button>
+        <div id="status">准备就绪</div>
+      </div>
+      {% endif %}
+    </section>
+
+    <div id="result" class="{% if share_mode %}{% else %}hidden{% endif %}">
+      <header class="cover" id="cover">
+        <div class="cover-photo" id="coverPhoto"></div>
+        <div id="chinaMap" aria-hidden="true"></div>
+        <div class="cover-shade"></div>
+        <div class="cover-copy">
+          <div class="eyebrow"><span class="swatch"></span>Roadbook 路书</div>
+          <h2 id="title">—</h2>
+          <div class="cover-route" id="coverRoute">
+            <span id="originText">出发</span>
+            <span id="destText">抵达</span>
+          </div>
+          <div class="lede" id="highlight"></div>
+        </div>
+        <div class="cover-leg" id="coverLeg" aria-live="polite"></div>
+        <div class="stats">
+          <div class="stat">
+            <div class="k">天数</div>
+            <div class="v" id="statDays">—</div>
+          </div>
+          <div class="stat">
+            <div class="k">里程 <span class="stat-src" id="statDistanceSrc"></span></div>
+            <div class="v" id="statDistance">—</div>
+          </div>
+          <div class="stat">
+            <div class="k">驾驶 <span class="stat-src" id="statDriveSrc"></span></div>
+            <div class="v" id="statDrive">—</div>
+          </div>
+          <div class="stat">
+            <div class="k">人均 <span class="stat-src" id="statBudgetSrc"></span></div>
+            <div class="v" id="statBudget">—</div>
+          </div>
+        </div>
+      </header>
+
+      <div class="toolbar hidden" aria-hidden="true">
+        <button class="rb-btn-ghost print-btn" type="button" onclick="window.print()">打印行程单</button>
+      </div>
+      <div class="hsr-card hidden" id="hsrBox" aria-label="高铁与租车"></div>
+      <div class="fit-strip hidden" id="fitStrip" aria-hidden="true"></div>
+      <div class="pre-trip-bar hidden" id="preTripBar" aria-hidden="true">
+        <div class="pre-trip-summary" id="preTripToggle" role="button" tabindex="-1">
+          <div class="pre-trip-left">
+            <span class="pre-trip-badge" id="preTripBadge">🎒 行前必查 0/0</span>
+            <span class="pre-trip-pending" id="preTripPending">点击展开核对驾驶证、胎压与必带物品</span>
+          </div>
+          <div class="pre-trip-right">
+            <div class="pre-trip-mini-track"><div class="pre-trip-mini-fill" id="preTripFill" style="width:0%"></div></div>
+            <span class="pre-trip-Expand" id="preTripArrow">展开核对 ▾</span>
+          </div>
+        </div>
+        <div class="pre-trip-drawer hidden" id="preTripDrawer">
+          <div id="checklistTopBox"></div>
+        </div>
+      </div>
+
+      <nav class="day-bar" id="dayBar" aria-label="按天筛选行程"></nav>
+      <div class="via" id="via"></div>
+
+      <div class="mobile-tabs" id="mobileTabs" role="tablist">
+        <button type="button" class="active" data-pane="itinerary">🗺 每日行程</button>
+        <button type="button" data-pane="budget">💰 费用预算</button>
+        <button type="button" data-pane="prep">🛡 避坑 & 准备</button>
+      </div>
+
+      <div class="workbench">
+        <section class="panel itinerary-panel" data-mobile-pane="itinerary">
+          <h3 data-i18n="itinerary">逐日路书</h3>
+          <div id="daysList">
+            <div class="shimmer-block"></div>
+            <div class="shimmer-block short"></div>
+          </div>
+        </section>
+
+        <aside class="rail">
+          <section class="panel copilot-panel" id="copilotPanel">
+            <div class="copilot-head">
+              <h4>💬 <span data-i18n="copilotTitle">路书副驾驶</span></h4>
+              <div style="display:flex;gap:6px">
+                <button type="button" class="undo-btn hidden" id="openBriefFromCopilot" data-i18n="copilotRewrite" tabindex="-1" aria-hidden="true">重写需求</button>
+                <button type="button" class="undo-btn" id="undoBtn" disabled title="回退到上一次修改前">↺ <span data-i18n="undo">撤销</span></button>
+              </div>
+            </div>
+            <div class="copilot-log" id="chatLog">
+              <div class="chat-msg bot" data-i18n="copilotHello">第 1 天在左边。要改就说一句，例如：中间加西安。</div>
+            </div>
+            <div class="copilot-quick" id="quickChips"></div>
+            <div class="copilot-form">
+              <input id="chatInput" placeholder="说句话微调路线、途经城或某天安排…" />
+              <button type="button" id="chatSend">调整</button>
+            </div>
+          </section>
+
+          <section class="panel" data-mobile-pane="budget">
+            <h4 data-i18n="budgetTitle">自驾预算估算</h4>
+            <div id="budgetBox"><div class="empty">生成后显示</div></div>
+          </section>
+
+          <section class="panel hidden" data-mobile-pane="prep" id="checklistRailPanel" aria-hidden="true">
+            <h4 data-i18n="checklistTitle">行前检查清单</h4>
+            <div id="checklistBox"></div>
+          </section>
+
+          <section class="panel" data-mobile-pane="prep">
+            <h4 data-i18n="tipsTitle">避坑指南和住宿</h4>
+            <div id="tips"><div class="shimmer-line"></div><div class="shimmer-line short"></div></div>
+            <div id="hotels" style="margin-top:12px"><div class="shimmer-line"></div><div class="shimmer-line short"></div></div>
+          </section>
+
+          <section class="panel" data-mobile-pane="prep">
+            <h4 data-i18n="foodTitle">必吃清单</h4>
+            <div id="foods">
+              <div class="shimmer-row"><i class="shimmer-thumb"></i><span class="shimmer-line"></span></div>
+              <div class="shimmer-row"><i class="shimmer-thumb"></i><span class="shimmer-line"></span></div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  {% if not share_mode %}
+  <div class="app-dock" id="appDock">
+    <button type="button" class="dock-chat-trigger" id="dockChatOpen" aria-label="打开路书副驾驶">
+      <span id="dockHint">第 1 天在左边。要改就说一句，例如：中间加西安。</span>
+    </button>
+    <button type="button" id="dockSave" data-i18n="dockSave">收藏</button>
+    <button type="button" class="hidden" id="dockHistory" data-i18n="dockHistory" tabindex="-1" aria-hidden="true">历史</button>
+    <button type="button" class="primary" id="dockPoster" data-i18n="dockPoster">海报</button>
+  </div>
+  {% endif %}
+
+  <div class="chat-sheet-backdrop" id="chatSheetBackdrop" aria-hidden="true">
+    <div class="chat-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-modes" role="tablist">
+        <button type="button" id="sheetModeBrief" data-i18n="modeBrief">说清需求</button>
+        <button type="button" id="sheetModeEdit" data-i18n="modeEdit">改这条路书</button>
+      </div>
+      <div class="copilot-head">
+        <h4>💬 <span data-i18n="copilotTitle">路书副驾驶</span></h4>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="undo-btn" id="undoBtnMobile" disabled>↺ <span data-i18n="undo">撤销</span></button>
+          <button type="button" class="undo-btn" id="closeChatSheet" data-i18n="closeSheet">收起</button>
+        </div>
+      </div>
+      <div class="copilot-log" id="chatLogMobile" style="flex:1;max-height:36vh"></div>
+      <div class="copilot-quick" id="quickChipsMobile"></div>
+      <div class="copilot-form">
+        <input id="chatInputMobile" data-i18n-placeholder="chatPhEdit" placeholder="如：中间加西安 / 不去运城 / 玩8天…" />
+        <button type="button" id="chatSendMobile" data-i18n="chatSend">发送</button>
+      </div>
+      <button type="button" class="rb-btn brief-confirm" id="briefConfirm" hidden data-i18n="briefConfirm">确定，写回需求描述</button>
+    </div>
+  </div>
+
+  <div class="drawer" id="settingsDrawer" aria-hidden="true">
+    <div class="drawer-sheet settings-sheet">
+      <div class="settings-head">
+        <h3 data-i18n="settings">设置</h3>
+        <button type="button" class="undo-btn" id="closeSettings" data-i18n="close">关闭</button>
+      </div>
+      <div class="settings-account">
+        <button type="button" class="user-avatar hidden" id="userAvatarLarge" aria-hidden="true"></button>
+        <div>
+          <div class="settings-account-label" data-i18n="account">账号</div>
+          <div class="auth-user-chip hidden" id="authUserChip"></div>
+        </div>
+      </div>
+      <div class="pref-label" data-i18n="appearance">外观</div>
+      <div class="appearance-switch" aria-label="language and theme">
+        <button type="button" class="rb-btn-ghost ghost-btn" data-lang-btn="zh" data-i18n="langZh">中</button>
+        <button type="button" class="rb-btn-ghost ghost-btn" data-lang-btn="en" data-i18n="langEn">EN</button>
+        <button type="button" class="rb-btn-ghost ghost-btn" data-theme-btn="light" data-i18n="themeLight">浅色</button>
+        <button type="button" class="rb-btn-ghost ghost-btn" data-theme-btn="dark" data-i18n="themeDark">深色</button>
+      </div>
+      {% if share_mode %}
+      <div class="hidden" aria-hidden="true" id="prefBlock">
+        <div class="pref-row" data-pref="pace"><button type="button" class="pref-chip active" data-value="balanced"></button></div>
+        <div class="pref-row" data-pref="theme"><button type="button" class="pref-chip active" data-value="landmark"></button></div>
+        <div class="pref-row" data-pref="budget_level"><button type="button" class="pref-chip active" data-value="comfort"></button></div>
+        <div class="pref-row" data-pref="travel_mode"><button type="button" class="pref-chip active" data-value="drive"></button></div>
+        <div class="pref-row" data-pref="highway"><button type="button" class="pref-chip active" data-value="express"></button></div>
+        <input type="number" id="budgetMinInput" value="2600" />
+        <input type="number" id="budgetMaxInput" value="4050" />
+        <input type="range" id="budgetMinRange" value="2600" />
+        <input type="range" id="budgetMaxRange" value="4050" />
+        <div id="formPaxSeg"><button type="button" class="active" data-form-pax="2"></button></div>
+        <div id="formEnergySeg"><button type="button" class="active" data-form-energy="oil"></button></div>
+      </div>
+      {% endif %}
+      <div class="settings-actions">
+        {% if not share_mode %}
+        <button type="button" class="rb-btn-ghost ghost-btn" id="togglePhone" data-i18n="phonePreview">手机预览</button>
+        <button type="button" class="rb-btn-ghost ghost-btn" id="openHistory" data-i18n="history">历史路书</button>
+        {% endif %}
+        <button type="button" class="rb-btn-ghost ghost-btn" id="openFeedback" data-i18n="feedback">意见反馈</button>
+        <button type="button" class="rb-btn-ghost ghost-btn hidden" id="authLogout" data-i18n="logout">退出</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer" id="historyDrawer" aria-hidden="true">
+    <div class="drawer-sheet">
+      <h3 data-i18n="historyTitle">历史路书夹</h3>
+      <div id="historyList"><div class="empty">暂无收藏</div></div>
+      <button type="button" class="rb-btn-ghost ghost-btn" id="closeHistory" style="margin-top:8px" data-i18n="close">关闭</button>
+    </div>
+  </div>
+
+  <div class="poster-modal" id="posterModal" aria-hidden="true">
+    <div class="poster-sheet">
+      <h3 data-i18n="posterTitle">发出这一版</h3>
+      <p class="poster-share-note" id="posterShareNote">生成海报时会写入公开链接</p>
+      <canvas id="posterCanvas" width="720" height="1280"></canvas>
+      <div class="poster-actions">
+        <button type="button" class="rb-btn print-btn" id="downloadPoster" data-i18n="downloadPoster">下载 PNG</button>
+        <button type="button" class="rb-btn" id="copyShareLink" data-i18n="copyShareLink" disabled>复制链接</button>
+        <button type="button" class="rb-btn-ghost ghost-btn" id="closePoster" data-i18n="close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.__SHARE_MODE__ = {{ share_mode | tojson }};
+    window.__SHARE_ID__ = {{ (share_id or "") | tojson }};
+  </script>
+  <button type="button" class="feedback-fab" id="openFeedbackMobile" data-i18n="feedback">反馈</button>
+  <div class="auth-sheet hidden" id="feedbackSheet" role="dialog" aria-labelledby="feedbackTitle">
+    <div class="auth-panel">
+      <div class="auth-head">
+        <h3 id="feedbackTitle" data-i18n="feedbackTitle">意见反馈</h3>
+        <button type="button" class="auth-close" id="feedbackClose" aria-label="关闭">×</button>
+      </div>
+      <p class="auth-hint" data-i18n="feedbackHint">说说哪里不准、哪里难用，或你希望加上的功能。不会上传完整路书。</p>
+      <div class="pref-row" id="feedbackCats">
+        <button type="button" class="pref-chip active" data-cat="不准">生成不准</button>
+        <button type="button" class="pref-chip" data-cat="难用">不好用</button>
+        <button type="button" class="pref-chip" data-cat="想要功能">想要的功能</button>
+        <button type="button" class="pref-chip" data-cat="其他">其他</button>
+      </div>
+      <textarea id="feedbackText" class="auth-input feedback-text" maxlength="800" placeholder="至少 4 个字"></textarea>
+      <button type="button" class="rb-btn auth-submit" id="feedbackSend" data-i18n="feedbackSend">提交</button>
+      <p class="auth-status" id="feedbackStatus"></p>
+    </div>
+  </div>
+
+  <script src="/static/js/i18n.js?v=9"></script>
+  <script src="/static/js/brief-chat.js?v=6"></script>
+  <script src="/static/js/csrf.js?v=1"></script>
+  <script src="/static/js/platform-bridge.js?v=5"></script>
+  <script src="/static/js/roadbook-core.js?v=9"></script>
+  <script src="/static/js/weather-fx.js?v=5"></script>
+  <script src="/static/js/roadbook-ui.js?v=74"></script>
+</body>
+</html>

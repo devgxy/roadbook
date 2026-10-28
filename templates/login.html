@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>登录 · Roadbook</title>
+  <script>
+    (function () {
+      try {
+        var theme = localStorage.getItem("rb-theme");
+        if (theme !== "light" && theme !== "dark") {
+          theme = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        var lang = localStorage.getItem("rb-lang") === "en" ? "en" : "zh";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.lang = lang;
+        document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/roadbook.css?v=59" />
+</head>
+<body class="login-page" data-density="desktop">
+  <div class="login-bg" aria-hidden="true"></div>
+  <main class="login-wrap">
+    <section class="login-stage">
+    <div class="login-hero-copy">
+      <div class="login-brand"><i></i>Roadbook</div>
+      <h1 class="login-title" data-i18n="loginHero">周末出发，把路写清楚。</h1>
+      <p class="login-sub" data-i18n="loginHeroSub">一句口语变成沿途路书。节奏、吃住和路线都留在这一页。</p>
+    </div>
+    <section class="login-card">
+      <div class="login-card-top">
+        <h2 data-i18n="loginTitle">手机号登录</h2>
+        <div class="appearance-switch login-appearance">
+          <button type="button" class="rb-btn-ghost ghost-btn" data-lang-btn="zh">中</button>
+          <button type="button" class="rb-btn-ghost ghost-btn" data-lang-btn="en">EN</button>
+          <button type="button" class="rb-btn-ghost ghost-btn" data-theme-btn="light" data-i18n="themeLight">浅色</button>
+          <button type="button" class="rb-btn-ghost ghost-btn" data-theme-btn="dark" data-i18n="themeDark">深色</button>
+        </div>
+      </div>
+      <p class="login-sub" data-i18n="loginSub" style="margin-bottom:16px;font-size:14px">验证码短信登录，进来就能做路书。</p>
+      {% if not sms_configured %}
+      <p class="login-warn">服务端尚未配置短信认证，请联系管理员。</p>
+      {% endif %}
+      <label class="auth-label" for="authCaptcha" data-i18n="loginCaptcha">图形验证码</label>
+      <div class="auth-code-row">
+        <input id="authCaptcha" class="auth-input login-input" type="text" maxlength="4" autocomplete="off" placeholder="4 位字符" />
+        <button type="button" class="captcha-btn" id="authCaptchaImg" title="点击刷新" aria-label="刷新图形验证码"></button>
+      </div>
+      <label class="auth-label" for="authPhone" data-i18n="loginPhone">手机号</label>
+      <input id="authPhone" class="auth-input login-input" type="tel" inputmode="numeric" maxlength="11" placeholder="11 位大陆手机号" autocomplete="tel" />
+      <label class="auth-label" for="authCode" data-i18n="loginCode">验证码</label>
+      <div class="auth-code-row">
+        <input id="authCode" class="auth-input login-input" type="text" inputmode="numeric" maxlength="6" placeholder="6 位验证码" autocomplete="one-time-code" />
+        <button type="button" class="rb-btn-secondary" id="authSendCode" data-i18n="loginSend" {% if not sms_configured %}disabled{% endif %}>获取验证码</button>
+      </div>
+      <button type="button" class="rb-btn login-submit" id="authSubmit" data-i18n="loginEnter" {% if not sms_configured %}disabled{% endif %}>进入路书</button>
+      <p class="auth-status login-status" id="authStatus"></p>
+    </section>
+    </section>
+    <p class="login-foot" data-i18n="loginFoot">自驾路书 · 真实沿途分段 · 对话微调</p>
+  </main>
+  <script>window.__LOGIN_NEXT__ = {{ next_path | tojson }};</script>
+  <script src="/static/js/i18n.js?v=7"></script>
+  <script src="/static/js/csrf.js?v=1"></script>
+  <script src="/static/js/login.js?v=5"></script>
+</body>
+</html>
