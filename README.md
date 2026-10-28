@@ -4,7 +4,7 @@
 
 > 周末出发，把路写清楚。
 
-打开首页即可生成。规划和高铁班次走本机进程，地图与配图通过 MCP 调用你自己的 Key。
+打开首页即可生成。地图、天气和配图走高德与 Tavily 的 MCP；通义用于可选文案精修和桌面助手。
 
 ## 能做什么
 
@@ -87,7 +87,7 @@ macOS 也可双击 [启动多MCP助手.command](启动多MCP助手.command)：�
 | `trip_planner.py` | 需求解析、路线采集、日程 / 预算 / 避坑、对话改路 |
 | `mcp_client.py` | 多 MCP 统一配置与按服务调用 |
 | `rail_hsr.py` | 高铁班次与到站租车重组 |
-| `templates/` | 规划页、后台（无登录页） |
+| `templates/` | 规划页、后台 |
 | `static/js/roadbook-ui.js` | DOM、SSE、海报、对话微调 |
 | `static/js/roadbook-core.js` | 预算 / 换站等无 DOM 逻辑 |
 | `static/js/brief-chat.js` | 「说清需求」半屏对话 |

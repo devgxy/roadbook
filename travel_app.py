@@ -39,7 +39,7 @@ from share_trips import create_share, load_share
 from query_guard import check_trip_query
 from trip_planner import apply_chat_edit_async, apply_via_reorder_async, image_tones, plan_trip_async
 
-# 开源版不做短信登录；按客户端 IP 做本地限流，避免单机被刷穿。
+# 按客户端 IP 限制规划与改路次数。
 _PLAN_DAILY = int(os.getenv("ROADBOOK_PLAN_DAILY", "40") or 40)
 _CHAT_DAILY = int(os.getenv("ROADBOOK_CHAT_DAILY", "80") or 80)
 _usage_lock = threading.Lock()
@@ -96,7 +96,7 @@ def _plan_params(body: dict[str, Any]) -> dict[str, Any]:
 
 
 async def login_page(_: Request) -> Response:
-    """兼容旧书签：开源版无登录页，直接回首页。"""
+    """`/login` 回到首页。"""
     return RedirectResponse("/", status_code=302)
 
 
@@ -235,7 +235,7 @@ def _public_bucket(path: str, method: str) -> tuple[str, int] | None:
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    """开源版：无登录闸门；保留 CSRF 与按 IP 的公开接口限流。"""
+    """CSRF 与按 IP 的接口限流。"""
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         path = request.url.path
@@ -556,7 +556,7 @@ async def via_reorder(request: Request) -> JSONResponse:
 
 
 async def auth_me(_: Request) -> JSONResponse:
-    """兼容前端旧调用：开源版视为本地访客，无需短信登录。"""
+    """页头用的访客状态。"""
     return JSONResponse({
         "ok": True,
         "logged_in": True,
@@ -567,7 +567,7 @@ async def auth_me(_: Request) -> JSONResponse:
 
 
 async def auth_logout(_: Request) -> JSONResponse:
-    return JSONResponse({"ok": True, "message": "开源版无需退出"})
+    return JSONResponse({"ok": True})
 
 
 def _admin_ok(request: Request) -> bool:

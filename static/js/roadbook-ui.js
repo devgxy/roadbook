@@ -3629,7 +3629,7 @@ function weatherForDay(dayNum) {
         ctx.fillStyle = muted;
         ctx.font = `400 13px ${sans}`;
         ctx.fillText("含每日安排 · 预算 · 行前准备", 210, bandTop + 176);
-        ctx.fillText("免登录打开这一版完整路书", 210, bandTop + 202);
+        ctx.fillText("打开这一版完整路书", 210, bandTop + 202);
       } else {
         const failLine = (window.t && t("posterShareFail")) || "分享未写成，先不要把海报当扫码入口";
         ctx.fillStyle = muted;
@@ -4292,7 +4292,6 @@ function weatherForDay(dayNum) {
     $("userAvatar")?.addEventListener("click", openSettings);
     (function initAuthHeader() {
       if (window.__SHARE_MODE__) return;
-      // 开源版无短信登录：本地访客可直接用，隐藏退出
       $("authLogout")?.classList.add("hidden");
       paintUserAvatar({ phone_tail: "客", phone_masked: "", guest: true });
     })();

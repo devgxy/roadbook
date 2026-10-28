@@ -1,8 +1,8 @@
 # Roadbook 交互与 UI
 
-只读 `templates/index.html` 与 `static/css/roadbook.css` 里真实存在的表面。分享页是首页的 `share_mode`，不是单独模板。没有登录页。生成后的逐日卡片、途经条、预算和清单由脚本写入下列容器，类名以样式表和渲染所用类为准。
+只读 `templates/index.html` 与 `static/css/roadbook.css` 里真实存在的表面。分享页是首页的 `share_mode`，不是单独模板。生成后的逐日卡片、途经条、预算和清单由脚本写入下列容器，类名以样式表和渲染所用类为准。
 
-主编辑页包在 `.page` 里。未登录会离开首页去登录；分享页不强制登录。
+主编辑页包在 `.page` 里。
 
 ## 1. 信息架构
 
@@ -83,13 +83,9 @@
 
 ### 分享页
 
-`body.share-mode.phone-preview`。`.shell.share-shell` 换成只读头：分享横幅 `.share-banner`，`#shareSave`、`#shareFork`（未登录保持 `hidden`）、`#shareMakeOwn`、`#shareStatus`。
+`body.share-mode.phone-preview`。`.shell.share-shell` 换成只读头：分享横幅 `.share-banner`，`#shareSave`、`#shareFork`、`#shareMakeOwn`、`#shareStatus`。
 
 表单不渲染。起终点等输入放在一段 `hidden` 里，供脚本读：`#origin`、`#destination`、`#days`、`#startDate`、`#query`、`#go`、`#status`。`#result` 直接可见。没有 `#appDock`。副驾驶和对话抽屉被 CSS 关掉。设置里另有一段 `hidden` 的 `#prefBlock`，只为分享页补齐偏好控件 id（`#budgetMinInput` 等），用户看不到。
-
-### 登录页
-
-没有登录页。访问 `/login` 会跳到首页。
 
 ## 2. 主任务交互
 
@@ -127,7 +123,7 @@
 
 ### 按钮
 
-- `.rb-btn`（含 `#go`、底坞 `.primary`）：主行动，实心胶囊，用于生成、下载、登录提交、分享收藏。
+- `.rb-btn`（含 `#go`、底坞 `.primary`）：主行动，实心胶囊，用于生成、下载、分享收藏。
 - `.rb-btn-ghost` / `.ghost-btn`：描边胶囊，用于设置、示例、关闭、打印类次动作。`.examples button` 共用这套。
 - `.swap-btn`：圆形，交换出发地和目的地。
 - `.undo-btn`：副驾驶和抽屉上的撤销、收起、关闭。
@@ -140,12 +136,10 @@
 - `.drive-pill.action`：日封面上的导航、对话改这天。
 - `.bento-mini-btn`：清单标题旁的小操作。
 - `.feedback-fab`：页面左下角打开反馈。
-- `.captcha-btn`：登录页图形验证码，点击刷新。
 - `.auth-close`：反馈层的关闭叉。
 - `.sheet-modes button`：抽屉顶部「说清需求 / 改这条路书」。
 - `.mobile-tabs button`：窄屏在行程、预算、准备之间切换。
 - `.appearance-switch button`：中 / EN、浅色 / 深色；按下用 `aria-pressed`。
-- `#authSendCode` 使用类名 `rb-btn-secondary`。样式表没有这条规则，它不继承 `.rb-btn`。
 
 ### 芯片
 
@@ -215,7 +209,7 @@
 
 ## 4. 视觉语言
 
-字体只有一条 token：`--font-ui: "Outfit", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif`。Outfit 用本地 `woff2`（拉丁与拉丁扩展），中文回落到 Noto Sans SC。`body` 与登录页都用它。字号阶梯是 `--fs-display`、`--fs-cover-title`、`--fs-hero-num`、`--fs-h3`、`--fs-day-title`、`--fs-title`、`--fs-body`、`--fs-caption`、`--fs-micro`。圆角是 `--r-xl` 24、`--r-lg` 18、`--r-md` 14、`--r-sm` 10。封面大标题另写了 `clamp(30px, 3vw, 44px)`，不走 `--fs-cover-title`。
+字体只有一条 token：`--font-ui: "Outfit", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif`。Outfit 用本地 `woff2`（拉丁与拉丁扩展），中文回落到 Noto Sans SC。`body` 用它。字号阶梯是 `--fs-display`、`--fs-cover-title`、`--fs-hero-num`、`--fs-h3`、`--fs-day-title`、`--fs-title`、`--fs-body`、`--fs-caption`、`--fs-micro`。圆角是 `--r-xl` 24、`--r-lg` 18、`--r-md` 14、`--r-sm` 10。封面大标题另写了 `clamp(30px, 3vw, 44px)`，不走 `--fs-cover-title`。
 
 主题写在 `html` 的 `data-theme`。浅色是 `:root`，`color-scheme: light`。深色是 `html[data-theme="dark"]`，`color-scheme: dark`。下面只列样式表里写明的色值。
 
@@ -282,5 +276,5 @@
 - `#dockHistory`：底坞「历史」，`hidden` + `aria-hidden`，点击仍打开 `#historyDrawer`。看得见的入口是设置里的 `#openHistory`。底坞「收藏」写入的是同一本历史夹。
 - `.toolbar` 里的「打印行程单」：整段 `hidden` + `aria-hidden`。打印样式会再藏掉壳、日条、底坞、抽屉和行前条。
 - `#sheetModeBrief`：节点常在。`body.has-trip` 后 `display: none`。生成前的补问仍用同一张 `#chatSheetBackdrop`。
-- 分享页 `#shareFork`：未登录保持 `hidden`，登录后才显示「据此修改」。
-- `#userAvatar`、`#userAvatarLarge` 显示访客头像；`#authLogout` 保持隐藏。
+- 分享页 `#shareFork` 显示「据此修改」，把这一版复制到本机草稿。
+- `#authLogout` 保持隐藏。

@@ -34,7 +34,7 @@
       const list = data.feedback || [];
       box.innerHTML = list.length ? list.map((item) => {
         const when = new Date((item.at || 0) * 1000).toLocaleString();
-        return `<article class="admin-card"><header><b>${item.category || "其他"}</b><span>${item.phone || "未登录"} · ${when}</span></header><p>${item.text || ""}</p></article>`;
+        return `<article class="admin-card"><header><b>${item.category || "其他"}</b><span>${item.phone || "访客"} · ${when}</span></header><p>${item.text || ""}</p></article>`;
       }).join("") : '<p class="admin-sub">暂无</p>';
     }
   }
