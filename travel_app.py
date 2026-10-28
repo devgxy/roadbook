@@ -16,8 +16,6 @@ from typing import Any, AsyncIterator
 import uvicorn
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from urllib.parse import quote
-
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -27,19 +25,6 @@ from starlette.staticfiles import StaticFiles
 
 from mcp_client import warmup_servers
 from rail_hsr import fetch_hsr_trains
-from auth_pnvs import (
-    check_verify_code,
-    inflight_enter,
-    inflight_leave,
-    issue_captcha,
-    mask_phone,
-    normalize_phone,
-    pnvs_configured,
-    reserve_usage,
-    resolve_session,
-    revoke_session,
-    send_verify_code,
-)
 from insights import (
     add_event,
     add_feedback,
@@ -53,6 +38,12 @@ from insights import (
 from share_trips import create_share, load_share
 from query_guard import check_trip_query
 from trip_planner import apply_chat_edit_async, apply_via_reorder_async, image_tones, plan_trip_async
+
+# 开源版不做短信登录；按客户端 IP 做本地限流，避免单机被刷穿。
+_PLAN_DAILY = int(os.getenv("ROADBOOK_PLAN_DAILY", "40") or 40)
+_CHAT_DAILY = int(os.getenv("ROADBOOK_CHAT_DAILY", "80") or 80)
+_usage_lock = threading.Lock()
+_usage: dict[str, dict[str, Any]] = {}
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env", override=True)
@@ -104,28 +95,9 @@ def _plan_params(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _safe_next_path(raw: str | None) -> str:
-    path = str(raw or "").strip()
-    if not path.startswith("/") or path.startswith("//"):
-        return "/"
-    return path
-
-
-async def login_page(request: Request) -> Response:
-    if _session_phone(request):
-        return RedirectResponse(_safe_next_path(request.query_params.get("next")), status_code=302)
-    html = _jinja.get_template("login.html").render(
-        sms_configured=pnvs_configured(),
-        next_path=_safe_next_path(request.query_params.get("next")),
-    )
-    # 禁止 bfcache：否则登录成功后点「返回」会还原未登录态的登录页
-    return HTMLResponse(
-        html,
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Pragma": "no-cache",
-        },
-    )
+async def login_page(_: Request) -> Response:
+    """兼容旧书签：开源版无登录页，直接回首页。"""
+    return RedirectResponse("/", status_code=302)
 
 
 def _share_title(trip: dict[str, Any] | None) -> str:
@@ -175,8 +147,7 @@ async def api_share_create(request: Request) -> JSONResponse:
     trip = body.get("trip") if isinstance(body, dict) else None
     if not isinstance(trip, dict):
         return JSONResponse({"ok": False, "message": "缺少路书"}, status_code=400)
-    phone = _session_phone(request) or ""
-    result = create_share(trip, owner_phone=phone)
+    result = create_share(trip, owner_phone="")
     status = 200 if result.get("ok") else 400
     return JSONResponse(result, status_code=status)
 
@@ -250,37 +221,21 @@ def _public_bucket(path: str, method: str) -> tuple[str, int] | None:
         return ("img", 80)
     if path == "/api/image-tones":
         return ("tones", 30)
-    if path.startswith("/api/auth/captcha"):
-        return ("captcha", 30)
     if path == "/api/feedback":
         return ("feedback", 8)
     if path == "/api/events":
         return ("events", 40)
     if path == "/api/admin/login":
         return ("admin", 8)
+    if path in ("/api/plan", "/api/plan/json"):
+        return ("plan", 12)
+    if path in ("/api/chat-edit", "/api/via-reorder"):
+        return ("chat", 20)
     return None
 
 
-class RequireLoginMiddleware(BaseHTTPMiddleware):
-    """未登录仅可访问登录页、分享页、静态资源与认证/健康 API。"""
-
-    @staticmethod
-    def _is_public(path: str) -> bool:
-        if path in ("/login", "/admin", "/api/health", "/api/qrcode"):
-            return True
-        if path.startswith("/static/"):
-            return True
-        if path.startswith("/api/auth/") or path in ("/api/feedback", "/api/events", "/api/admin/login", "/api/admin/summary", "/api/admin/export"):
-            return True
-        if path.startswith("/s/"):
-            return True
-        if path.startswith("/api/share/") and path != "/api/share":
-            return True
-        if path.startswith("/api/img"):
-            return True
-        if path == "/api/image-tones":
-            return True
-        return False
+class SecurityMiddleware(BaseHTTPMiddleware):
+    """开源版：无登录闸门；保留 CSRF 与按 IP 的公开接口限流。"""
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         path = request.url.path
@@ -295,24 +250,59 @@ class RequireLoginMiddleware(BaseHTTPMiddleware):
             )
             return _stamp_csrf(resp, request, token)
         if method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith("/api/"):
-            if path.startswith("/api/auth/") and not (request.headers.get("user-agent") or "").strip():
-                return JSONResponse({"ok": False, "message": "拒绝空客户端"}, status_code=403)
             cookie = request.cookies.get("rb_csrf") or ""
             header = request.headers.get("x-csrf-token") or ""
             if not cookie or not header or not hmac.compare_digest(cookie, header):
                 resp = JSONResponse({"ok": False, "message": "页面已过期，请刷新后重试"}, status_code=403)
                 return _stamp_csrf(resp, request, token)
-        if not self._is_public(path) and not _session_phone(request):
-            if path.startswith("/api/"):
-                resp = JSONResponse(
-                    {"ok": False, "message": "请先登录", "login_required": True},
-                    status_code=401,
-                )
-                return _stamp_csrf(resp, request, token)
-            resp = RedirectResponse(f"/login?next={quote(path)}", status_code=302)
-            return _stamp_csrf(resp, request, token)
         response = await call_next(request)
         return _stamp_csrf(response, request, token)
+
+
+def _today_key() -> str:
+    return time.strftime("%Y-%m-%d", time.localtime())
+
+
+def _client_key(request: Request) -> str:
+    return f"ip:{_client_ip(request)}"
+
+
+def _usage_bucket_unlocked(key: str) -> dict[str, Any]:
+    day = _today_key()
+    row = _usage.get(key)
+    if not row or row.get("day") != day:
+        row = {"day": day, "plan": 0, "chat": 0, "inflight_plan": 0, "inflight_chat": 0}
+        _usage[key] = row
+    return row
+
+
+def inflight_enter(key: str, kind: str, limit: int) -> bool:
+    field = "inflight_plan" if kind == "plan" else "inflight_chat"
+    with _usage_lock:
+        row = _usage_bucket_unlocked(key)
+        cur = int(row.get(field) or 0)
+        if cur >= limit:
+            return False
+        row[field] = cur + 1
+        return True
+
+
+def inflight_leave(key: str, kind: str) -> None:
+    field = "inflight_plan" if kind == "plan" else "inflight_chat"
+    with _usage_lock:
+        row = _usage_bucket_unlocked(key)
+        row[field] = max(0, int(row.get(field) or 0) - 1)
+
+
+def reserve_usage(key: str, kind: str) -> dict[str, Any] | None:
+    cap = _PLAN_DAILY if kind == "plan" else _CHAT_DAILY
+    with _usage_lock:
+        row = _usage_bucket_unlocked(key)
+        used = int(row.get(kind) or 0)
+        if used >= cap:
+            return {"ok": False, "message": f"今日{('规划' if kind == 'plan' else '改路')}次数已用完（{cap}）"}
+        row[kind] = used + 1
+    return None
 
 
 def _sse_error(message: str) -> StreamingResponse:
@@ -325,17 +315,15 @@ def _sse_error(message: str) -> StreamingResponse:
 
 
 def _begin_model(request: Request, kind: str) -> tuple[str | None, str | None]:
-    phone = _session_phone(request)
-    if not phone:
-        return None, "请先登录"
+    key = _client_key(request)
     limit = 1 if kind == "plan" else 2
-    if not inflight_enter(phone, kind, limit):
+    if not inflight_enter(key, kind, limit):
         return None, "已有任务进行中，请稍候再试"
-    err = reserve_usage(phone, kind)
+    err = reserve_usage(key, kind)
     if err:
-        inflight_leave(phone, kind)
+        inflight_leave(key, kind)
         return None, str(err.get("message") or "今日次数已用完")
-    return phone, None
+    return key, None
 
 
 async def plan_stream(request: Request) -> StreamingResponse:
@@ -353,9 +341,9 @@ async def plan_stream(request: Request) -> StreamingResponse:
     rejected = check_trip_query(params["query"], params["origin"], params["destination"])
     if rejected:
         return _sse_error(rejected)
-    phone, deny = _begin_model(request, "plan")
-    if deny or not phone:
-        return _sse_error(deny or "请先登录")
+    client_key, deny = _begin_model(request, "plan")
+    if deny or not client_key:
+        return _sse_error(deny or "暂时无法规划")
 
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
     loop = asyncio.get_running_loop()
@@ -395,7 +383,7 @@ async def plan_stream(request: Request) -> StreamingResponse:
                 payload = json.dumps(item, ensure_ascii=False)
                 yield f"data: {payload}\n\n".encode("utf-8")
         finally:
-            inflight_leave(phone, "plan")
+            inflight_leave(client_key, "plan")
             if not task.done():
                 task.cancel()
                 try:
@@ -428,16 +416,16 @@ async def plan_json(request: Request) -> JSONResponse:
     rejected = check_trip_query(params["query"], params["origin"], params["destination"])
     if rejected:
         return JSONResponse({"ok": False, "message": rejected}, status_code=400)
-    phone, deny = _begin_model(request, "plan")
-    if deny or not phone:
-        return JSONResponse({"ok": False, "message": deny or "请先登录"}, status_code=429)
+    client_key, deny = _begin_model(request, "plan")
+    if deny or not client_key:
+        return JSONResponse({"ok": False, "message": deny or "暂时无法规划"}, status_code=429)
     try:
         trip = await plan_trip_async(**params, with_photos=True)
         return JSONResponse({"ok": True, "trip": trip})
     except Exception as e:
         return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
     finally:
-        inflight_leave(phone, "plan")
+        inflight_leave(client_key, "plan")
 
 
 async def health(_: Request) -> JSONResponse:
@@ -555,94 +543,31 @@ async def via_reorder(request: Request) -> JSONResponse:
     via = body.get("via_cities") if isinstance(body, dict) else None
     if not isinstance(trip, dict) or not isinstance(via, list):
         return JSONResponse({"ok": False, "message": "缺少路书或途经顺序"}, status_code=400)
-    phone, deny = _begin_model(request, "chat")
-    if deny or not phone:
-        return JSONResponse({"ok": False, "message": deny or "请先登录"}, status_code=429)
+    client_key, deny = _begin_model(request, "chat")
+    if deny or not client_key:
+        return JSONResponse({"ok": False, "message": deny or "暂时无法改路"}, status_code=429)
     try:
         res = await apply_via_reorder_async(trip, [str(x) for x in via])
         return JSONResponse({"ok": True, **res})
     except Exception as e:
         return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
     finally:
-        inflight_leave(phone, "chat")
+        inflight_leave(client_key, "chat")
 
 
-def _session_phone(request: Request) -> str | None:
-    token = request.cookies.get("rb_session") or ""
-    return resolve_session(token)
-
-
-async def auth_sms_send(request: Request) -> JSONResponse:
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    phone = normalize_phone(str((body or {}).get("phone") or ""))
-    if not phone:
-        return JSONResponse({"ok": False, "message": "请输入大陆 11 位手机号"}, status_code=400)
-    captcha_id = str((body or {}).get("captcha_id") or "")
-    captcha_code = str((body or {}).get("captcha_code") or "")
-    ip = _client_ip(request)
-    try:
-        result = await asyncio.to_thread(send_verify_code, phone, ip, captcha_id, captcha_code)
-    except Exception as e:
-        return JSONResponse({"ok": False, "message": str(e)}, status_code=502)
-    status = 200 if result.get("ok") else 400
-    return JSONResponse(result, status_code=status)
-
-
-async def auth_sms_verify(request: Request) -> JSONResponse:
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    phone = normalize_phone(str((body or {}).get("phone") or ""))
-    code = str((body or {}).get("code") or "")
-    if not phone:
-        return JSONResponse({"ok": False, "message": "手机号无效"}, status_code=400)
-    try:
-        result = await asyncio.to_thread(check_verify_code, phone, code, _client_ip(request))
-    except Exception as e:
-        return JSONResponse({"ok": False, "message": str(e)}, status_code=502)
-    if not result.get("ok"):
-        return JSONResponse(result, status_code=400)
-    resp = JSONResponse(
-        {
-            "ok": True,
-            "phone_masked": mask_phone(phone),
-            "message": "登录成功",
-        }
-    )
-    resp.set_cookie(
-        "rb_session",
-        result["token"],
-        httponly=True,
-        samesite="lax",
-        secure=_https(request),
-        max_age=30 * 86400,
-        path="/",
-    )
-    return resp
-
-
-async def auth_me(request: Request) -> JSONResponse:
-    phone = _session_phone(request)
-    if not phone:
-        return JSONResponse({"ok": True, "logged_in": False, "phone_masked": "", "phone_tail": ""})
+async def auth_me(_: Request) -> JSONResponse:
+    """兼容前端旧调用：开源版视为本地访客，无需短信登录。"""
     return JSONResponse({
         "ok": True,
         "logged_in": True,
-        "phone_masked": mask_phone(phone),
-        "phone_tail": phone[-2:] if len(phone) >= 2 else "",
+        "guest": True,
+        "phone_masked": "",
+        "phone_tail": "客",
     })
 
 
-async def auth_logout(request: Request) -> JSONResponse:
-    token = request.cookies.get("rb_session") or ""
-    revoke_session(token)
-    resp = JSONResponse({"ok": True})
-    resp.delete_cookie("rb_session", path="/")
-    return resp
+async def auth_logout(_: Request) -> JSONResponse:
+    return JSONResponse({"ok": True, "message": "开源版无需退出"})
 
 
 def _admin_ok(request: Request) -> bool:
@@ -699,12 +624,10 @@ async def feedback_create(request: Request) -> JSONResponse:
         body = await request.json()
     except Exception:
         body = {}
-    phone = _session_phone(request)
-    masked = mask_phone(phone) if phone else ""
     result = add_feedback(
         str((body or {}).get("text") or ""),
         str((body or {}).get("category") or ""),
-        masked,
+        "guest",
         _client_ip(request),
     )
     status = 200 if result.get("ok") else 400
@@ -716,19 +639,14 @@ async def events_create(request: Request) -> JSONResponse:
         body = await request.json()
     except Exception:
         body = {}
-    phone = _session_phone(request)
-    masked = mask_phone(phone) if phone else ""
     props = (body or {}).get("props") if isinstance(body, dict) else None
-    result = add_event(str((body or {}).get("name") or ""), props if isinstance(props, dict) else {}, masked, _client_ip(request))
+    result = add_event(
+        str((body or {}).get("name") or ""),
+        props if isinstance(props, dict) else {},
+        "guest",
+        _client_ip(request),
+    )
     return JSONResponse(result, status_code=200 if result.get("ok") else 400)
-
-
-async def auth_captcha(_: Request) -> JSONResponse:
-    return JSONResponse(issue_captcha())
-
-
-async def auth_status(_: Request) -> JSONResponse:
-    return JSONResponse({"ok": True, "sms_configured": pnvs_configured()})
 
 
 async def chat_edit(request: Request) -> JSONResponse:
@@ -741,16 +659,16 @@ async def chat_edit(request: Request) -> JSONResponse:
     message = str((body or {}).get("message") or "").strip()
     if not isinstance(trip, dict) or not message:
         return JSONResponse({"ok": False, "message": "缺少当前路书或修改指令"}, status_code=400)
-    phone, deny = _begin_model(request, "chat")
-    if deny or not phone:
-        return JSONResponse({"ok": False, "message": deny or "请先登录"}, status_code=429)
+    client_key, deny = _begin_model(request, "chat")
+    if deny or not client_key:
+        return JSONResponse({"ok": False, "message": deny or "暂时无法改路"}, status_code=429)
     try:
         res = await apply_chat_edit_async(trip, message)
         return JSONResponse({"ok": True, **res})
     except Exception as e:
         return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
     finally:
-        inflight_leave(phone, "chat")
+        inflight_leave(client_key, "chat")
 
 
 routes = [
@@ -774,12 +692,8 @@ routes = [
     Route("/api/qrcode", poster_qrcode),
     Route("/api/health", health),
     Route("/api/rail-hsr", rail_hsr, methods=["POST"]),
-    Route("/api/auth/status", auth_status),
     Route("/api/auth/me", auth_me),
     Route("/api/auth/logout", auth_logout, methods=["POST"]),
-    Route("/api/auth/captcha", auth_captcha),
-    Route("/api/auth/sms/send", auth_sms_send, methods=["POST"]),
-    Route("/api/auth/sms/verify", auth_sms_verify, methods=["POST"]),
 ]
 
 static_dir = ROOT / "static"
@@ -790,7 +704,7 @@ async def _startup() -> None:
 
 
 app = Starlette(routes=routes, on_startup=[_startup])
-app.add_middleware(RequireLoginMiddleware)
+app.add_middleware(SecurityMiddleware)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 

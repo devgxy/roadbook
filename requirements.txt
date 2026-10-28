@@ -4,11 +4,9 @@ dashscope==1.22.1
 qwen-agent[gui]==0.0.19
 tqdm
 python-dateutil
-
-# 号码认证 · 短信认证 API
-alibabacloud_dypnsapi20170525>=2.0.0
-alibabacloud_tea_openapi>=0.3.0
-alibabacloud_tea_util>=0.3.0
-
-# travel app
-# starlette/uvicorn/httpx already installed via mcp
+python-dotenv
+httpx
+jinja2
+uvicorn
+starlette
+segno

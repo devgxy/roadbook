@@ -1,6 +1,6 @@
 # Roadbook 交互与 UI
 
-只读 `templates/index.html`、`templates/login.html` 与 `static/css/roadbook.css` 里真实存在的表面。分享页是首页的 `share_mode`，不是单独模板。生成后的逐日卡片、途经条、预算和清单由脚本写入下列容器，类名以样式表和渲染所用类为准。
+只读 `templates/index.html` 与 `static/css/roadbook.css` 里真实存在的表面。分享页是首页的 `share_mode`，不是单独模板。开源版无登录页。生成后的逐日卡片、途经条、预算和清单由脚本写入下列容器，类名以样式表和渲染所用类为准。
 
 主编辑页包在 `.page` 里。未登录会离开首页去登录；分享页不强制登录。
 
@@ -89,15 +89,7 @@
 
 ### 登录页
 
-`templates/login.html`，`body.login-page`。
-
-- 背景 `.login-bg`（装饰）
-- 左文案 `.login-hero-copy`：`.login-brand`、`.login-title`、`.login-sub`
-- 右卡 `.login-card`：`.login-card-top`、`.login-appearance`、未配置短信时的 `.login-warn`
-- `#authCaptcha`、`#authCaptchaImg`、`#authPhone`、`#authCode`、`#authSendCode`、`#authSubmit`、`#authStatus`
-- 页脚 `.login-foot`
-
-语言和主题按钮与首页设置同一套 `data-lang-btn` / `data-theme-btn`。
+开源版已移除。访问 `/login` 会跳到首页。
 
 ## 2. 主任务交互
 
@@ -291,4 +283,4 @@
 - `.toolbar` 里的「打印行程单」：整段 `hidden` + `aria-hidden`。打印样式会再藏掉壳、日条、底坞、抽屉和行前条。
 - `#sheetModeBrief`：节点常在。`body.has-trip` 后 `display: none`。生成前的补问仍用同一张 `#chatSheetBackdrop`。
 - 分享页 `#shareFork`：未登录保持 `hidden`，登录后才显示「据此修改」。
-- `#userAvatar`、`#userAvatarLarge`、`#authUserChip`、`#authLogout`：初始 `hidden`，登录成功后显示。未登录用户在主编辑页会被送去 `/login`，所以头像不是一条独立的隐藏功能，只是登录前占位。
+- `#userAvatar`、`#userAvatarLarge`：开源版显示本地访客头像；`#authLogout` 保持隐藏。

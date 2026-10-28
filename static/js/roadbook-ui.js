@@ -4292,30 +4292,9 @@ function weatherForDay(dayNum) {
     $("userAvatar")?.addEventListener("click", openSettings);
     (function initAuthHeader() {
       if (window.__SHARE_MODE__) return;
-      const logout = $("authLogout");
-      if (!logout) return;
-      const goLogin = () => {
-        window.location.replace("/login?next=" + encodeURIComponent(window.location.pathname || "/"));
-      };
-      const refreshAuthUi = async () => {
-        try {
-          const r = await fetch("/api/auth/me", { credentials: "same-origin" });
-          const data = await r.json();
-          if (data.logged_in) {
-            paintUserAvatar(data);
-            logout.classList.remove("hidden");
-          } else {
-            goLogin();
-          }
-        } catch (_) {
-          /* 瞬时网络错误不踢登录，避免误跳登录页 */
-        }
-      };
-      logout.addEventListener("click", async () => {
-        await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-        window.location.replace("/login");
-      });
-      refreshAuthUi();
+      // 开源版无短信登录：本地访客可直接用，隐藏退出
+      $("authLogout")?.classList.add("hidden");
+      paintUserAvatar({ phone_tail: "客", phone_masked: "", guest: true });
     })();
     $("dockHistory")?.addEventListener("click", openHist);
     $("closeHistory")?.addEventListener("click", closeHist);
@@ -4617,38 +4596,15 @@ function weatherForDay(dayNum) {
       if (!isShareView()) return;
       const statusEl = $("shareStatus");
       const setShareStatus = (msg) => { if (statusEl) statusEl.textContent = msg || ""; };
-      const nextPath = (window.location.pathname || "/s/") + (window.location.search || "");
-      const loginUrl = "/login?next=" + encodeURIComponent(nextPath);
-      let loggedIn = false;
-      const applyAuth = (data) => {
-        loggedIn = !!(data && data.logged_in);
-        const logout = $("authLogout");
-        const fork = $("shareFork");
-        const own = $("shareMakeOwn");
-        if (loggedIn) {
-          paintUserAvatar(data);
-          logout?.classList.remove("hidden");
-          fork?.classList.remove("hidden");
-          if (own) {
-            own.href = "/";
-            own.textContent = "去做自己的路书";
-          }
-        } else {
-          ["userAvatar", "userAvatarLarge"].forEach((id) => $(id)?.classList.add("hidden"));
-          $("authUserChip")?.classList.add("hidden");
-          logout?.classList.add("hidden");
-          fork?.classList.add("hidden");
-          if (own) {
-            own.href = loginUrl;
-            own.textContent = "我也要做路书";
-          }
-        }
-      };
+      paintUserAvatar({ phone_tail: "客", phone_masked: "", guest: true });
+      $("authLogout")?.classList.add("hidden");
+      $("shareFork")?.classList.remove("hidden");
+      const own = $("shareMakeOwn");
+      if (own) {
+        own.href = "/";
+        own.textContent = "去做自己的路书";
+      }
       $("shareSave")?.addEventListener("click", () => {
-        if (!loggedIn) {
-          window.location.href = loginUrl;
-          return;
-        }
         if (!lastTrip) {
           setShareStatus("路书还在加载，请稍候再收藏");
           return;
@@ -4657,10 +4613,6 @@ function weatherForDay(dayNum) {
         setShareStatus("已收藏到本机历史路书。这是你的副本，不会改到好友的分享。");
       });
       $("shareFork")?.addEventListener("click", () => {
-        if (!loggedIn) {
-          window.location.href = loginUrl;
-          return;
-        }
         if (!lastTrip) {
           setShareStatus("路书还在加载");
           return;
@@ -4678,14 +4630,6 @@ function weatherForDay(dayNum) {
         }
         window.location.href = "/";
       });
-      $("authLogout")?.addEventListener("click", async () => {
-        await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-        window.location.reload();
-      });
-      fetch("/api/auth/me", { credentials: "same-origin" })
-        .then((r) => r.json())
-        .then(applyAuth)
-        .catch(() => applyAuth({ logged_in: false }));
     }
 
     (function initFeedback() {
